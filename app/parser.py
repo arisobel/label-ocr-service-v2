@@ -2,6 +2,167 @@ import re
 
 FIELD_BOUNDARY = r'(?=\s*(?:ARTICLE\s*NO|NO\.?|ITEM|COMP(?:OSITION)?|WEIGHT|WIDTH|PRICE|SPEC)\s*[:.\-]|$)'
 
+# ---------------------------------------------------------------------------
+# Fiber catalog — mirrors the main_fiber table in the database
+# ---------------------------------------------------------------------------
+FIBER_CATALOG = {
+    1:  {"name": "Poliester",        "acronym": "P"},
+    2:  {"name": "Cotton",           "acronym": "C"},
+    3:  {"name": "Linen",            "acronym": "L"},
+    4:  {"name": "Nylon",            "acronym": "N"},
+    5:  {"name": "Viscose",          "acronym": "V"},
+    6:  {"name": "Rayon",            "acronym": "R"},
+    7:  {"name": "Acetate",          "acronym": "A"},
+    8:  {"name": "Silk",             "acronym": "S"},
+    9:  {"name": "Tencel / Lyocell", "acronym": "T"},
+    10: {"name": "Wool",             "acronym": "W"},
+}
+
+# Maps every known label token (uppercase) -> fiber_id.
+# Rules applied when building:
+#   - "T" alone = Polyester (id=1)  — dominant Asian/Chinese market convention
+#   - "TENCEL" / "LYOCELL" by full name = id=9
+#   - "MODAL" = Viscose (id=5)
+#   - Single-letter aliases only added where unambiguous at the end of the list
+FIBER_ALIASES = {
+    # ── Poliester (id=1) ────────────────────────────────────────────────────
+    "POLYESTER": 1, "POLIESTER": 1, "POLIÉSTER": 1, "POLYÉSTER": 1,
+    "POLYESTERE": 1, "DACRON": 1, "TERGAL": 1, "TERYLENE": 1, "FORTREL": 1,
+    "TREVIRA": 1, "PES": 1, "PL": 1, "PET": 1, "PER": 1,
+    "POLY": 1, "POLIETER": 1,
+    "T": 1,   # Asian/Chinese convention: T = Terylene/Polyester
+    "P": 1,
+
+    # ── Cotton (id=2) ───────────────────────────────────────────────────────
+    "COTTON": 2, "ALGODÃO": 2, "ALGODAO": 2, "ALGODÓN": 2, "ALGODON": 2,
+    "COTON": 2, "COTONE": 2, "BAUMWOLLE": 2,
+    "COT": 2, "CO": 2, "C": 2,
+
+    # ── Linen (id=3) ────────────────────────────────────────────────────────
+    "LINEN": 3, "LINHO": 3, "LINO": 3, "LIN": 3, "LEINEN": 3, "FLAX": 3,
+    "LI": 3, "LN": 3, "L": 3,
+
+    # ── Nylon / Polyamide (id=4) ─────────────────────────────────────────────
+    "NYLON": 4, "POLYAMIDE": 4, "POLIAMIDA": 4, "POLYAMID": 4,
+    "PA6": 4, "PA66": 4, "PA66/6": 4, "PA6/66": 4, "PA6.6": 4,
+    "CORDURA": 4, "TACTEL": 4,
+    "NYL": 4, "NY": 4, "PA": 4, "N": 4,
+
+    # ── Viscose / Modal (id=5) ───────────────────────────────────────────────
+    "VISCOSE": 5, "VISCOSA": 5, "VISCOSIO": 5,
+    "MODAL": 5, "LENZING": 5,
+    "CV": 5,   # Cupro-Viscose
+    "VI": 5, "VIS": 5, "MD": 5, "V": 5,
+
+    # ── Rayon (id=6) ─────────────────────────────────────────────────────────
+    "RAYON": 6, "RAIOM": 6, "RAY": 6, "RA": 6, "R": 6,
+
+    # ── Acetate (id=7) ──────────────────────────────────────────────────────
+    "ACETATE": 7, "ACETATO": 7, "CELANESE": 7,
+    "CTA": 7, "ACE": 7, "AC": 7, "CA": 7, "A": 7,
+
+    # ── Silk (id=8) ──────────────────────────────────────────────────────────
+    "SILK": 8, "SEDA": 8, "SOIE": 8, "SETA": 8, "SEIDE": 8,
+    "SIL": 8, "SI": 8, "SE": 8, "S": 8,
+
+    # ── Tencel / Lyocell (id=9) ───────────────────────────────────────────────
+    # NOTE: "T" is NOT here — it maps to Polyester above (Asian convention).
+    # Only resolve id=9 when the full word TENCEL/LYOCELL is present.
+    "TENCEL": 9, "LYOCELL": 9, "LYOCELLE": 9,
+    "CLY": 9, "LYO": 9, "TL": 9, "LY": 9,
+
+    # ── Wool (id=10) ─────────────────────────────────────────────────────────
+    "WOOL": 10, "LÃ": 10, "LA": 10, "LANA": 10, "LAINE": 10,
+    "WOLLE": 10, "MERINO": 10, "CASHMERE": 10, "KASHMIR": 10,
+    "ANGORA": 10, "ALPACA": 10,
+    "WOL": 10, "WO": 10, "WS": 10, "W": 10,
+
+    # ── Elastane / Spandex — no id in catalog, used to skip unknowns cleanly ─
+    # (intentionally not mapped so it doesn't pollute main_fiber)
+}
+
+# ---------------------------------------------------------------------------
+# Composition parser helpers
+# ---------------------------------------------------------------------------
+_COMP_PATTERNS = [
+    # "54%C"  /  "60% POLYESTER"  /  "46.5%T"
+    re.compile(r'(\d+(?:\.\d+)?)\s*%\s*([A-Z][A-Z0-9/\.]*)', re.IGNORECASE),
+    # "N:59.8%"  /  "CO: 40%"
+    re.compile(r'([A-Z][A-Z0-9/\.]*)\s*:\s*(\d+(?:\.\d+)?)\s*%', re.IGNORECASE),
+    # "POLYESTER 60%"
+    re.compile(r'([A-Z]{3,}[A-Z0-9]*)\s+(\d+(?:\.\d+)?)\s*%', re.IGNORECASE),
+]
+
+def _parse_composition_parts(composition):
+    """Return [(percentage, TOKEN_UPPER), ...] from a composition string.
+    Tries all three regex patterns and returns the result set that resolves
+    the most tokens in FIBER_ALIASES — this handles both '60%POLYESTER' and
+    'N:59.8% R:32.2%' formats correctly even when a greedier pattern would
+    accidentally match wrong tokens from the other format.
+    """
+    if not composition:
+        return []
+
+    best_results = []
+    best_score = -1
+
+    for pattern in _COMP_PATTERNS:
+        matches = pattern.findall(composition)
+        if not matches:
+            continue
+        results = []
+        for a, b in matches:
+            try:
+                pct = float(a)
+                token = b.strip().upper()
+            except ValueError:
+                try:
+                    pct = float(b)
+                    token = a.strip().upper()
+                except ValueError:
+                    continue
+            if pct > 0:
+                results.append((pct, token))
+
+        if not results:
+            continue
+
+        # Pick the pattern whose tokens resolve the most fibers in the catalog
+        score = sum(1 for _, tok in results if tok in FIBER_ALIASES)
+        if score > best_score:
+            best_score = score
+            best_results = results
+
+    return best_results
+
+
+def extract_main_fiber(composition):
+    """Derive the main (dominant) fiber from a composition string.
+
+    Returns a dict  {"id": int, "name": str, "acronym": str}
+    or None if the composition is absent or no fiber can be resolved.
+
+    The fiber with the HIGHEST percentage wins.
+    If two fibers share the same percentage the first one in the string wins.
+    """
+    if not composition:
+        return None
+
+    parts = _parse_composition_parts(composition)
+    if not parts:
+        return None
+
+    # Sort descending by percentage; stable sort preserves original order on ties
+    parts_sorted = sorted(parts, key=lambda x: x[0], reverse=True)
+
+    for _pct, token in parts_sorted:
+        fiber_id = FIBER_ALIASES.get(token)
+        if fiber_id is not None:
+            entry = FIBER_CATALOG[fiber_id]
+            return {"id": fiber_id, "name": entry["name"], "acronym": entry["acronym"]}
+
+    return None
+
 def normalize_measurement_noise(s: str) -> str:
     s = s.replace("|", "")
     s = re.sub(r'(?<=\d)CV\b', 'CM', s, flags=re.IGNORECASE)
@@ -143,6 +304,7 @@ def parse_label_text(raw_text: str, raw_lines=None):
         "article": None,
         "item": None,
         "composition": None,
+        "main_fiber": None,
         "weight": None,
         "width": None,
         "price": None,
@@ -162,5 +324,6 @@ def parse_label_text(raw_text: str, raw_lines=None):
         raw_lines, [r'WEIGHT'], validator=looks_like_weight
     ) or extract_weight(raw_text)
     result["price"] = extract_price(raw_text)
+    result["main_fiber"] = extract_main_fiber(result["composition"])
 
     return result

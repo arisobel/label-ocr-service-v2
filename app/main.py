@@ -6,6 +6,7 @@ from app.vision import detect_label_region
 from app.ocr import run_ocr
 from app.parser import parse_label_text
 from app.gemini_client import call_gemini, merge_parsed, should_use_llm
+from app.parser import extract_main_fiber
 from app.config import USE_GEMINI_FALLBACK
 
 app = FastAPI(title="Label OCR Service v2")
@@ -45,6 +46,8 @@ async def extract(file: UploadFile = File(...)):
         try:
             parsed_llm = call_gemini(raw_text=raw_text, raw_lines=raw_lines, confidence=conf)
             final_parsed = merge_parsed(parsed_local, parsed_llm)
+            # Recompute main_fiber from the (possibly LLM-corrected) composition
+            final_parsed["main_fiber"] = extract_main_fiber(final_parsed.get("composition"))
         except Exception as exc:
             llm_error = str(exc)
 

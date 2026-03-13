@@ -28,9 +28,10 @@ label-ocr-service-v2/
 2. detecta etiqueta com OpenCV
 3. aplica OCR com Tesseract
 4. gera `raw_text`, `raw_lines`, `confidence`
-5. faz parsing local
+5. faz parsing local (inclui derivação de `main_fiber`)
 6. opcionalmente chama Gemini para complementar ou corrigir campos
 7. faz merge entre parser local e LLM
+8. recomputa `main_fiber` a partir da composição final
 
 ## Variáveis de ambiente
 
@@ -46,6 +47,38 @@ label-ocr-service-v2/
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
+
+## Campo main_fiber
+
+Derivado automaticamente do campo `composition`. Retorna a fibra com **maior percentual** na composição.
+
+```json
+"main_fiber": {
+  "id": 1,
+  "name": "Poliester",
+  "acronym": "P"
+}
+```
+
+| id | name             | acronym |
+|----|------------------|---------|
+|  1 | Poliester        | P       |
+|  2 | Cotton           | C       |
+|  3 | Linen            | L       |
+|  4 | Nylon            | N       |
+|  5 | Viscose          | V       |
+|  6 | Rayon            | R       |
+|  7 | Acetate          | A       |
+|  8 | Silk             | S       |
+|  9 | Tencel / Lyocell | T       |
+| 10 | Wool             | W       |
+
+Observações importantes:
+- `T` isolado na composição → **Polyester** (id=1), convenção de mercado asiático
+- `TENCEL` / `LYOCELL` por extenso → id=9
+- `MODAL` → Viscose (id=5)
+- Se `composition` for `null`, `main_fiber` será `null`
+- Suporta 3 formatos de composição: `54%C`, `N:59.8%`, `POLYESTER 60%`
 
 ## Swagger
 

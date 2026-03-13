@@ -113,6 +113,11 @@ Usually contains multiple percentages:
 - `54%C 46%T`
 - `N:59.8% R:32.2% SP:8%`
 
+### main_fiber
+This field is **computed, not extracted**. Never ask the LLM to fill it.
+It is derived from `composition` by `extract_main_fiber()` in `parser.py`.
+The LLM should only improve `composition` — `main_fiber` will be recomputed automatically after the merge.
+
 ### Width
 Usually looks like:
 - `160CM`
@@ -151,3 +156,5 @@ The LLM should fill:
 - null values
 - empty values
 - clearly contaminated values
+
+`main_fiber` is **never filled by the LLM**. It is always recomputed from `composition` after merge.
