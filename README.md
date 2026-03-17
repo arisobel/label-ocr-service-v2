@@ -24,6 +24,8 @@ label-ocr-service-v2/
 
 ## Pipeline
 
+### Via imagem (`POST /extract`)
+
 1. recebe imagem
 2. detecta etiqueta com OpenCV
 3. aplica OCR com Tesseract
@@ -32,6 +34,28 @@ label-ocr-service-v2/
 6. opcionalmente chama Gemini para complementar ou corrigir campos
 7. faz merge entre parser local e LLM
 8. recomputa `main_fiber` a partir da composição final
+
+### Via texto extraído (`POST /extract-text`)
+
+1. recebe `raw_text` (obrigatório) e `raw_lines` (opcional) já extraídos via OCR externo
+2. faz parsing local (inclui derivação de `main_fiber`)
+3. opcionalmente chama Gemini para complementar ou corrigir campos
+4. faz merge entre parser local e LLM
+5. recomputa `main_fiber` a partir da composição final
+
+**Exemplo de requisição:**
+
+```json
+{
+  "raw_text": "ARTICLE NO. AF0123 COMP 54%C 46%T WIDTH 160CM WEIGHT 205GSM",
+  "raw_lines": [
+    "ARTICLE NO. AF0123",
+    "COMP 54%C 46%T",
+    "WIDTH 160CM",
+    "WEIGHT 205GSM"
+  ]
+}
+```
 
 ## Variáveis de ambiente
 

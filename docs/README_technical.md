@@ -25,9 +25,19 @@ label-ocr-service-v2/
 
 ## Purpose
 
-This service receives an image of a textile sample label, detects the label, performs OCR, applies rule-based extraction, and optionally enriches or corrects the result with Gemini.
+This service receives either an image or pre-extracted OCR text of a textile sample label, performs parsing, and optionally enriches or corrects the result with Gemini.
+
+## Endpoints
+
+| Method | Path            | Input                        | Description                                      |
+|--------|-----------------|------------------------------|--------------------------------------------------|
+| GET    | `/health`       | —                            | Health check                                     |
+| POST   | `/extract`      | image file (multipart)       | Full pipeline: vision → OCR → parse → (Gemini)  |
+| POST   | `/extract-text` | JSON `{raw_text, raw_lines}` | Parse pre-extracted OCR text → (Gemini)          |
 
 ## Processing Stages
+
+### `/extract` (image upload)
 
 1. image upload
 2. label detection with OpenCV
@@ -37,6 +47,13 @@ This service receives an image of a textile sample label, detects the label, per
 6. local parsing with regex and heuristics
 7. optional Gemini fallback
 8. merge local and LLM outputs
+
+### `/extract-text` (pre-extracted text)
+
+1. receive `raw_text` (required) and `raw_lines` (optional) already extracted externally
+2. local parsing with regex and heuristics
+3. optional Gemini fallback
+4. merge local and LLM outputs
 
 ## Output Contract
 

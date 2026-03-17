@@ -28,7 +28,7 @@ label-ocr-service-v2/
 
 ## System Goal
 
-Convert photos of textile label cards into structured JSON.
+Convert photos of textile label cards — or pre-extracted OCR text — into structured JSON.
 
 Typical fields:
 - company
@@ -57,11 +57,22 @@ Avoid:
 
 ## Real Pipeline
 
+### Via image (`POST /extract`)
+
 ```text
 image
 -> detect label ROI
 -> OCR
 -> raw_text + raw_lines
+-> local parser
+-> optional Gemini fallback
+-> merge results
+```
+
+### Via pre-extracted text (`POST /extract-text`)
+
+```text
+raw_text (+ optional raw_lines)
 -> local parser
 -> optional Gemini fallback
 -> merge results
