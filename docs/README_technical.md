@@ -112,3 +112,71 @@ After the Gemini merge, `main_fiber` is recomputed from the final `composition`.
 |  8 | Silk             | S       | SILK, SEDA, SOIE, SETA                      |
 |  9 | Tencel / Lyocell | T       | TENCEL, LYOCELL, CLY, LYO                   |
 | 10 | Wool             | W       | WOOL, MERINO, CASHMERE, ANGORA, ALPACA, WO  |
+
+---
+
+## Deploy (CapRover)
+
+O projeto usa dois scripts PowerShell para gerar e publicar o artefato de deploy.
+
+### Pré-requisitos
+
+- Node.js instalado e `caprover` CLI disponível globalmente:
+  ```powershell
+  npm install -g caprover
+  ```
+- Arquivo `.env` na raiz do projeto com as credenciais (veja `.env` de exemplo):
+  ```
+  CAPROVER_URL=https://captain.<seu-servidor>
+  CAPROVER_APP=<nome-do-app-no-caprover>
+  CAPROVER_APP_TOKEN=<token-gerado-em-Apps-Deployment>
+  ```
+  O `.env` é ignorado pelo Git. O app token é gerado em **CapRover → Apps → seu app → Deployment**.
+
+### Fluxo completo
+
+```powershell
+# 1. Gera o tarball em ./dist/deploy-<timestamp>.tar
+.\build-caprover.ps1
+
+# 2. Envia o tarball mais recente para o CapRover
+.\deploy-caprover.ps1
+```
+
+### Opções do deploy-caprover.ps1
+
+| Parâmetro        | Padrão                   | Descrição                                              |
+|------------------|--------------------------|--------------------------------------------------------|
+| `-CapRoverUrl`   | `$env:CAPROVER_URL`      | URL do painel CapRover (lido do `.env` se omitido)     |
+| `-App`           | `$env:CAPROVER_APP`      | Nome do app no CapRover (lido do `.env` se omitido)    |
+| `-AppToken`      | `$env:CAPROVER_APP_TOKEN`| App token (lido do `.env` se omitido; pede senha se ausente) |
+| `-TarFile`       | último `deploy-*.tar`    | Caminho explícito para um tarball específico           |
+| `-UseSavedConfig`| —                        | Usa a configuração salva pela CLI (`caprover login`)   |
+
+### Exemplos
+
+```powershell
+# Deploy com credenciais explícitas (sem .env)
+.\deploy-caprover.ps1 -CapRoverUrl https://captain.exemplo.com -App ocr-samples -AppToken <token>
+
+# Deploy de um tarball específico
+.\deploy-caprover.ps1 -TarFile .\dist\deploy-20260825-120000.tar
+
+# Deploy usando configuração salva da CLI do CapRover
+.\deploy-caprover.ps1 -UseSavedConfig
+```
+
+### Conteúdo do tarball
+
+O `build-caprover.ps1` empacota apenas os arquivos necessários para o build no servidor:
+
+```
+captain-definition
+Dockerfile
+requirements.txt
+README.md
+app/
+docs/
+```
+
+Arquivos excluídos: `__pycache__`, `*.pyc`, `*.pyo`, `dist/`, `.env`, `venv/`.
