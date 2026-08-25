@@ -48,6 +48,7 @@ Do not infer main_fiber; it is calculated deterministically by the service.
 
 Field rules:
 - A label code may be marked No, Number, Code, Article, or 编号.
+- ITEM NO usually represents supplier code and should map to article, not sample/item description.
 - Width is a fabric width (for example 160CM); do not confuse it with Meter/length (for example 1.8M).
 - Weight must be a fabric weight such as GSM or g/m², never a length or price.
 - Composition must preserve percentages and fiber abbreviations (for example 54%P 39%R 7%SP).

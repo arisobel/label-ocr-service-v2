@@ -56,3 +56,14 @@ def test_confident_gemini_value_replaces_wrong_local_value():
     merged = merge_parsed(local, llm)
     assert merged["article"] == "AF0123"
     assert merged["width"] == "160CM"
+
+
+def test_item_no_is_treated_as_article_code():
+    parsed = parse_label_text("ITEM NO: TWM-RDM444 COMP: 20D+26D*50D")
+    assert parsed["article"] == "TWM-RDM444"
+
+
+def test_compact_composition_without_percent_is_supported():
+    parsed = parse_label_text("COMP: 100T")
+    assert parsed["composition"] == "100T"
+    assert parsed["main_fiber"]["name"] == "Poliester"

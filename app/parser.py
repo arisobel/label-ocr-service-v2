@@ -91,13 +91,16 @@ _COMP_PATTERNS = [
     re.compile(r'([A-Z][A-Z0-9/\.]*)\s*:\s*(\d+(?:\.\d+)?)\s*%', re.IGNORECASE),
     # "POLYESTER 60%"
     re.compile(r'([A-Z]{3,}[A-Z0-9]*)\s+(\d+(?:\.\d+)?)\s*%', re.IGNORECASE),
+    # "100T" / "54C 46T"
+    re.compile(r'(\d+(?:\.\d+)?)\s*([A-Z][A-Z0-9/\.]*)', re.IGNORECASE),
 ]
 
 def _parse_composition_parts(composition):
     """Return [(percentage, TOKEN_UPPER), ...] from a composition string.
-    Tries all three regex patterns and returns the result set that resolves
+    Tries all regex patterns and returns the result set that resolves
     the most tokens in FIBER_ALIASES — this handles both '60%POLYESTER' and
-    'N:59.8% R:32.2%' formats correctly even when a greedier pattern would
+    'N:59.8% R:32.2%' formats (including compact forms like '100T') correctly
+    even when a greedier pattern would
     accidentally match wrong tokens from the other format.
     """
     if not composition:
@@ -186,7 +189,10 @@ def looks_like_weight(s: str) -> bool:
     return bool(re.search(r'\b\d{2,4}\s*(?:GSM|GM|G/M2|G/M²)\b', s, re.IGNORECASE))
 
 def looks_like_composition(s: str) -> bool:
-    return bool(re.search(r'\d+(?:\.\d+)?%\s*[A-Z]+', s, re.IGNORECASE))
+    return bool(
+        re.search(r'\d+(?:\.\d+)?%\s*[A-Z]+', s, re.IGNORECASE)
+        or re.search(r'\b\d{1,3}(?:\.\d+)?\s*[A-Z]{1,5}\b', s, re.IGNORECASE)
+    )
 
 def find_company(raw_lines):
     blocked = ["COMP", "COMPOSITION", "WEIGHT", "WIDTH", "PRICE", "ARTICLE", "NO.", "ITEM", "SPEC"]
@@ -222,6 +228,7 @@ def normalize_article(value: str) -> str:
 
 def extract_article(raw_text):
     patterns = [
+        r'ITEM\s*NO\.?\s*[:.\-]?\s*([A-Z0-9§\-]+)',
         r'ARTICLE\s*NO\.?\s*[:.\-]?\s*([A-Z0-9§\-]+)',
         r'\bNO\.?\s*[:.\-]?\s*([A-Z0-9§\-]{4,})',
         r'\bART\.?\s*[:.\-]?\s*([A-Z0-9§\-]{4,})',
@@ -235,7 +242,8 @@ def extract_article(raw_text):
 def extract_composition(raw_text):
     patterns = [
         rf'COMP(?:OSITION)?\s*[:.\-]?\s*(.+?){FIELD_BOUNDARY}',
-        r'((?:[A-Z]{1,4}\s*:\s*)?\d+(?:\.\d+)?%\s*[A-Z]+(?:\s+(?:[A-Z]{1,4}\s*:\s*)?\d+(?:\.\d+)?%\s*[A-Z]+)+)'
+        r'((?:[A-Z]{1,4}\s*:\s*)?\d+(?:\.\d+)?%\s*[A-Z]+(?:\s+(?:[A-Z]{1,4}\s*:\s*)?\d+(?:\.\d+)?%\s*[A-Z]+)+)',
+        r'((?:[A-Z]{1,4}\s*:\s*)?\d{1,3}(?:\.\d+)?\s*[A-Z]{1,5}(?:\s+(?:[A-Z]{1,4}\s*:\s*)?\d{1,3}(?:\.\d+)?\s*[A-Z]{1,5})+)'
     ]
     for p in patterns:
         m = re.search(p, raw_text, re.IGNORECASE)
