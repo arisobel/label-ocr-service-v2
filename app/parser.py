@@ -167,8 +167,6 @@ def normalize_measurement_noise(s: str) -> str:
     s = s.replace("|", "")
     s = re.sub(r'(?<=\d)CV\b', 'CM', s, flags=re.IGNORECASE)
     s = re.sub(r'(?<=\d)GV\b', 'GM', s, flags=re.IGNORECASE)
-    s = re.sub(r'^\s*1(?=\d{2,3}\s*C[MV]\b)', '', s, flags=re.IGNORECASE)
-    s = re.sub(r'^\s*1(?=\d{2,4}\s*(?:GSM|GM|G/M2|G/M²)\b)', '', s, flags=re.IGNORECASE)
     return s.strip()
 
 def clean_value(value: str) -> str:

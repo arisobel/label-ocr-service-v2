@@ -5,11 +5,11 @@ import numpy as np
 import cv2
 
 from app.vision import detect_label_region
-from app.ocr import run_ocr
+from app.ocr import run_ocr_candidates
 from app.parser import parse_label_text
 from app.gemini_client import call_gemini, merge_parsed, should_use_llm
 from app.parser import extract_main_fiber
-from app.config import USE_GEMINI_FALLBACK
+from app.config import GEMINI_MODEL, GOOGLE_API_KEY, USE_GEMINI_FALLBACK
 
 app = FastAPI(title="Label OCR Service v2")
 
@@ -24,9 +24,27 @@ def read_image(file_bytes):
         raise ValueError("Invalid image")
     return img
 
+def rotate_image(image, rotation):
+    if rotation == 0:
+        return image
+    if rotation == 90:
+        return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+    if rotation == 180:
+        return cv2.rotate(image, cv2.ROTATE_180)
+    return cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+def encode_jpeg(image):
+    ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    return encoded.tobytes() if ok else None
+
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "gemini_enabled": USE_GEMINI_FALLBACK,
+        "gemini_model": GEMINI_MODEL,
+        "gemini_key_configured": bool(GOOGLE_API_KEY),
+    }
 
 @app.post("/extract")
 async def extract(file: UploadFile = File(...)):
@@ -37,10 +55,11 @@ async def extract(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
     cropped, vision_debug = detect_label_region(image)
-    if cropped is None:
-        cropped = image
+    label_image = cropped if cropped is not None else image
+    candidates = [("original", 0, image)]
+    candidates.extend(("label_crop", rotation, rotate_image(label_image, rotation)) for rotation in (0, 90, 180, 270))
 
-    raw_text, conf, ocr_debug = run_ocr(cropped)
+    raw_text, conf, ocr_debug = run_ocr_candidates(candidates)
     raw_lines = ocr_debug.get("raw_lines", [])
 
     parsed_local = parse_label_text(raw_text=raw_text, raw_lines=raw_lines)
@@ -50,7 +69,14 @@ async def extract(file: UploadFile = File(...)):
 
     if USE_GEMINI_FALLBACK and should_use_llm(parsed_local, conf):
         try:
-            parsed_llm = call_gemini(raw_text=raw_text, raw_lines=raw_lines, confidence=conf)
+            # Images remain request-local numpy/bytes objects and are not persisted.
+            gemini_images = [encode_jpeg(image)]
+            if cropped is not None:
+                gemini_images.append(encode_jpeg(cropped))
+            parsed_llm = call_gemini(
+                raw_text=raw_text, raw_lines=raw_lines, confidence=conf,
+                images=gemini_images,
+            )
             final_parsed = merge_parsed(parsed_local, parsed_llm)
             # Recompute main_fiber from the (possibly LLM-corrected) composition
             final_parsed["main_fiber"] = extract_main_fiber(final_parsed.get("composition"))
@@ -69,6 +95,7 @@ async def extract(file: UploadFile = File(...)):
             **vision_debug,
             **ocr_debug,
             "llm_enabled": USE_GEMINI_FALLBACK,
+            "gemini_used_successfully": parsed_llm is not None,
             "llm_error": llm_error
         }
     }
@@ -108,6 +135,7 @@ async def extract_text(body: ExtractTextRequest):
         "final_parsed": final_parsed,
         "debug": {
             "llm_enabled": USE_GEMINI_FALLBACK,
+            "gemini_used_successfully": parsed_llm is not None,
             "llm_error": llm_error
         }
     }

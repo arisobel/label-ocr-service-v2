@@ -28,10 +28,11 @@ label-ocr-service-v2/
 
 1. recebe imagem
 2. detecta etiqueta com OpenCV
-3. aplica OCR com Tesseract
+3. cria candidatos em memória: imagem original, recorte da etiqueta e rotações de 0°, 90°, 180° e 270°; quando possível, corrige a perspectiva do recorte
+4. aplica OCR com Tesseract em todos os candidatos e seleciona o resultado de maior confiança
 4. gera `raw_text`, `raw_lines`, `confidence`
 5. faz parsing local (inclui derivação de `main_fiber`)
-6. opcionalmente chama Gemini para complementar ou corrigir campos
+6. opcionalmente chama Gemini multimodal com a imagem original e o melhor recorte, usando OCR como evidência complementar
 7. faz merge entre parser local e LLM
 8. recomputa `main_fiber` a partir da composição final
 
@@ -60,10 +61,28 @@ label-ocr-service-v2/
 ## Variáveis de ambiente
 
 - `GOOGLE_API_KEY`
-- `USE_GEMINI_FALLBACK`
-- `GEMINI_MODEL`
-- `GEMINI_MIN_CONFIDENCE`
+- `USE_GEMINI_FALLBACK` (`true` para habilitar o fallback)
+- `GEMINI_MODEL` (por exemplo, `gemini-3.5-flash` ou `gemini-2.5-flash`; use um modelo disponível na sua conta)
+- `GEMINI_MIN_CONFIDENCE` (limiar de OCR de 0 a 100 para acionar Gemini; padrão `70`)
 - `TESSERACT_CMD`
+
+Nunca registre ou publique `GOOGLE_API_KEY`. O endpoint de saúde informa somente se ela está configurada:
+
+```bash
+curl http://localhost:8000/health
+```
+
+```json
+{"status":"ok","gemini_enabled":true,"gemini_model":"gemini-2.5-flash","gemini_key_configured":true}
+```
+
+Em CapRover, use os logs da aplicação para diagnosticar chamadas Gemini (Dashboard do app → Logs, ou `captain-cmd service logs --follow`). Erros não-2xx registram status, modelo e corpo retornado pelo Google com qualquer chave mascarada; a resposta HTTP mantém apenas uma mensagem segura.
+
+## Testes
+
+```bash
+pytest -q
+```
 
 ## Rodar localmente
 
