@@ -5,7 +5,7 @@ import numpy as np
 import cv2
 
 from app.vision import detect_label_region
-from app.ocr import run_ocr_candidates
+from app.ocr import build_ocr_candidates, run_ocr_candidates
 from app.parser import parse_label_text
 from app.gemini_client import call_gemini, merge_parsed, should_use_llm
 from app.parser import extract_main_fiber
@@ -23,15 +23,6 @@ def read_image(file_bytes):
     if img is None:
         raise ValueError("Invalid image")
     return img
-
-def rotate_image(image, rotation):
-    if rotation == 0:
-        return image
-    if rotation == 90:
-        return cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
-    if rotation == 180:
-        return cv2.rotate(image, cv2.ROTATE_180)
-    return cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
 def encode_jpeg(image):
     ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 92])
@@ -56,13 +47,14 @@ async def extract(file: UploadFile = File(...)):
 
     cropped, vision_debug = detect_label_region(image)
     label_image = cropped if cropped is not None else image
-    candidates = [("original", 0, image)]
-    candidates.extend(("label_crop", rotation, rotate_image(label_image, rotation)) for rotation in (0, 90, 180, 270))
+    candidates, candidate_debug = build_ocr_candidates(image, label_image)
 
     raw_text, conf, ocr_debug = run_ocr_candidates(candidates)
     raw_lines = ocr_debug.get("raw_lines", [])
 
     parsed_local = parse_label_text(raw_text=raw_text, raw_lines=raw_lines)
+    if ocr_debug.get("supplier_code_candidate"):
+        parsed_local["supplier_code"] = ocr_debug["supplier_code_candidate"]
     parsed_llm = None
     llm_error = None
     final_parsed = dict(parsed_local)
@@ -93,6 +85,7 @@ async def extract(file: UploadFile = File(...)):
         "final_parsed": final_parsed,
         "debug": {
             **vision_debug,
+            **candidate_debug,
             **ocr_debug,
             "llm_enabled": USE_GEMINI_FALLBACK,
             "gemini_used_successfully": parsed_llm is not None,

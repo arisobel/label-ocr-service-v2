@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from app.gemini_client import GeminiRequestError, call_gemini, merge_parsed
-from app.ocr import run_ocr_candidates
+from app.ocr import _supplier_code_from_text, build_ocr_candidates, run_ocr_candidates
 from app.parser import extract_main_fiber, parse_label_text
 
 
@@ -58,9 +58,34 @@ def test_confident_gemini_value_replaces_wrong_local_value():
     assert merged["width"] == "160CM"
 
 
-def test_item_no_is_treated_as_article_code():
+def test_item_no_is_treated_as_supplier_code():
     parsed = parse_label_text("ITEM NO: TWM-RDM444 COMP: 20D+26D*50D")
-    assert parsed["article"] == "TWM-RDM444"
+    assert parsed["supplier_code"] == "TWM-RDM444"
+
+
+def test_no_and_article_are_extracted_into_their_own_fields():
+    parsed = parse_label_text(
+        "NO: MDSTN07000-26991503 ARTICLE TNR",
+        raw_lines=["NO: MDSTN07000-26991503", "ARTICLE TNR"],
+    )
+    assert parsed["supplier_code"] == "MDSTN07000-26991503"
+    assert parsed["article"] == "TNR"
+
+
+def test_targeted_no_candidate_accepts_only_code_like_values():
+    assert _supplier_code_from_text("MDSTN07000-26991503") == "MDSTN07000-26991503"
+    assert _supplier_code_from_text("TNR") is None
+
+
+def test_label_candidates_include_left_and_no_regions(monkeypatch):
+    image = np.zeros((400, 800, 3), dtype=np.uint8)
+    monkeypatch.setattr("app.ocr._mask_qr_code", lambda value: (value, {"x": 550, "y": 150, "w": 200, "h": 200}))
+    candidates, debug = build_ocr_candidates(image, image)
+    names = [candidate[0] for candidate in candidates]
+    assert "label_without_qr" in names
+    assert "label_left" in names
+    assert "supplier_code" in names
+    assert debug["qr_detected"] is True
 
 
 def test_compact_composition_without_percent_is_supported():

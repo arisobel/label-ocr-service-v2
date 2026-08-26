@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 TEXTILE_SCHEMA = {
     "type": "OBJECT",
     "properties": {
-        "company": {"type": "STRING", "nullable": True}, "article": {"type": "STRING", "nullable": True},
+        "company": {"type": "STRING", "nullable": True}, "supplier_code": {"type": "STRING", "nullable": True}, "article": {"type": "STRING", "nullable": True},
         "item": {"type": "STRING", "nullable": True}, "composition": {"type": "STRING", "nullable": True},
         "weight": {"type": "STRING", "nullable": True}, "width": {"type": "STRING", "nullable": True},
         "price": {"type": "STRING", "nullable": True}, "spec": {"type": "STRING", "nullable": True},
         "grade_or_mark": {"type": "STRING", "nullable": True}, "notes": {"type": "STRING", "nullable": True},
         "field_confidence": {"type": "OBJECT", "properties": {
             name: {"type": "NUMBER", "nullable": True}
-            for name in ("article", "item", "composition", "weight", "width")
+            for name in ("supplier_code", "article", "item", "composition", "weight", "width")
         }},
     },
 }
@@ -47,8 +47,8 @@ Preserve readable Chinese characters exactly.
 Do not infer main_fiber; it is calculated deterministically by the service.
 
 Field rules:
-- A label code may be marked No, Number, Code, Article, or 编号.
-- ITEM NO usually represents supplier code and should map to article, not sample/item description.
+- A label code marked No, Number, Code, ITEM NO, or 编号 is supplier_code.
+- ARTICLE/品名 is the sample name and must map to article, not supplier_code.
 - Width is a fabric width (for example 160CM); do not confuse it with Meter/length (for example 1.8M).
 - Weight must be a fabric weight such as GSM or g/m², never a length or price.
 - Composition must preserve percentages and fiber abbreviations (for example 54%P 39%R 7%SP).

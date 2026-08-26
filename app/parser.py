@@ -226,7 +226,7 @@ def normalize_article(value: str) -> str:
     value = re.sub(r'^AFO(?=\d)', 'AF0', value)
     return value
 
-def extract_article(raw_text):
+def extract_supplier_code(raw_text):
     patterns = [
         r'ITEM\s*NO\.?\s*[:.\-]?\s*([A-Z0-9§\-]+)',
         r'ARTICLE\s*NO\.?\s*[:.\-]?\s*([A-Z0-9§\-]+)',
@@ -237,6 +237,17 @@ def extract_article(raw_text):
         m = re.search(p, raw_text, re.IGNORECASE)
         if m:
             return normalize_article(m.group(1))
+    return None
+
+def extract_article(raw_text):
+    patterns = [
+        r'ARTICLE\s*(?!NO\b)[:.\-]?\s*([A-Z0-9\-]{2,})',
+        r'\bART\.?\s*[:.\-]?\s*([A-Z0-9\-]{2,})',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, raw_text, re.IGNORECASE)
+        if match:
+            return clean_value(match.group(1))
     return None
 
 def extract_composition(raw_text):
@@ -307,6 +318,7 @@ def parse_label_text(raw_text: str, raw_lines=None):
 
     result = {
         "company": find_company(raw_lines),
+        "supplier_code": None,
         "article": None,
         "item": None,
         "composition": None,
@@ -319,7 +331,8 @@ def parse_label_text(raw_text: str, raw_lines=None):
         "notes": None,
     }
 
-    result["article"] = extract_article(raw_text)
+    result["supplier_code"] = extract_supplier_code(raw_text)
+    result["article"] = extract_from_lines(raw_lines, [r'\bARTICLE\b', r'品名']) or extract_article(raw_text)
     result["composition"] = extract_from_lines(
         raw_lines, [r'COMP(?:OSITION)?'], validator=looks_like_composition
     ) or extract_composition(raw_text)
